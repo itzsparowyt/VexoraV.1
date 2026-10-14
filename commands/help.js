@@ -1,28 +1,45 @@
 
-const { EmbedBuilder } = require("discord.js");
+const {
+  EmbedBuilder,
+  SlashCommandBuilder
+} = require("discord.js");
 
 module.exports = {
   name: "help",
   description: "Show VEXORA command guide",
 
-  async execute(message) {
-    const embed = new EmbedBuilder()
-      .setColor(0x2684ff)
-      .setTitle("🛡️ VEXORA — Command Center")
-      .setDescription(
-        "**⚙️ Utility**\n" +
-        "`!help` — Show command guide\n" +
-        "`!ping` — Check bot latency\n\n" +
-        "**👤 Information**\n" +
-        "`!userinfo @user` — User details\n" +
-        "`!serverinfo` — Server details\n" +
-        "`!roleinfo @role` — Role details\n\n" +
-        "**🛡️ Moderation**\n" +
-        "Moderation commands will be added after the command loader is ready."
-      )
-      .setFooter({ text: "VEXORA • Security & Server Management" })
-      .setTimestamp();
+  data: new SlashCommandBuilder()
+    .setName("help")
+    .setDescription("Show VEXORA command guide"),
 
-    return message.reply({ embeds: [embed] });
+  async execute(message, client) {
+    return sendHelp(message, client, false);
+  },
+
+  async executeSlash(interaction, client) {
+    return sendHelp(interaction, client, true);
   }
 };
+
+async function sendHelp(target, client, isSlash) {
+  const commands = [...client.commands.values()]
+    .map(command => `\`!${command.name}\` — ${command.description || "VEXORA command"}`)
+    .join("\n");
+
+  const embed = new EmbedBuilder()
+    .setColor(0x2684ff)
+    .setTitle("🛡️ VEXORA — Command Center")
+    .setDescription(
+      `**Prefix:** \`!\`\n` +
+      `**Commands loaded:** ${client.commands.size}\n\n` +
+      (commands || "No commands loaded yet.")
+    )
+    .setFooter({ text: "VEXORA • Security & Server Management" })
+    .setTimestamp();
+
+  if (isSlash) {
+    return target.reply({ embeds: [embed] });
+  }
+
+  return target.reply({ embeds: [embed] });
+}
