@@ -1,3 +1,4 @@
+
 const {
   Client,
   GatewayIntentBits,
@@ -13,7 +14,7 @@ const TOKEN = process.env.DISCORD_TOKEN;
 const PREFIX = process.env.PREFIX || "!";
 
 if (!TOKEN) {
-  throw new Error("Missing DISCORD_TOKEN environment variable.");
+  throw new Error("DISCORD_TOKEN environment variable is missing.");
 }
 
 const client = new Client({
@@ -29,31 +30,29 @@ client.commands = new Collection();
 
 const commandsPath = path.join(__dirname, "commands");
 
-if (fs.existsSync(commandsPath)) {
-  const commandFiles = fs.readdirSync(commandsPath)
-    .filter(file => file.endsWith(".js"));
+if (!fs.existsSync(commandsPath)) {
+  fs.mkdirSync(commandsPath, { recursive: true });
+}
 
-  for (const file of commandFiles) {
-    const filePath = path.join(commandsPath, file);
+for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith(".js"))) {
+  try {
+    const command = require(path.join(commandsPath, file));
 
-    try {
-      const command = require(filePath);
-
-      if (command.name && typeof command.execute === "function") {
-        client.commands.set(command.name, command);
-        console.log(`Loaded command: ${command.name}`);
-      } else {
-        console.log(`Skipped invalid command file: ${file}`);
-      }
-    } catch (error) {
-      console.error(`Failed to load ${file}:`, error);
+    if (!command.name || typeof command.execute !== "function") {
+      console.warn(`Skipped invalid command: ${file}`);
+      continue;
     }
+
+    client.commands.set(command.name, command);
+    console.log(`Loaded command: ${command.name}`);
+  } catch (error) {
+    console.error(`Failed to load ${file}:`, error);
   }
 }
 
 client.once(Events.ClientReady, readyClient => {
   console.log(`VEXORA online: ${readyClient.user.tag}`);
-  console.log(`Loaded ${client.commands.size} prefix commands.`);
+  console.log(`Loaded ${client.commands.size} commands.`);
 
   readyClient.user.setPresence({
     activities: [{
@@ -65,25 +64,52 @@ client.once(Events.ClientReady, readyClient => {
 });
 
 client.on(Events.MessageCreate, async message => {
-  if (message.author.bot || !message.guild) return;
+  if (!message.guild || message.author.bot) return;
   if (!message.content.startsWith(PREFIX)) return;
 
-  const args = message.content
-    .slice(PREFIX.length)
-    .trim()
-    .split(/\s+/);
+  const parts = message.content.slice(PREFIX.length).trim().split(/\s+/);
+  const name = (parts.shift() || "").toLowerCase();
 
-  const commandName = (args.shift() || "").toLowerCase();
-  if (!commandName) return;
+  if (!name) return;
 
-  const command = client.commands.get(commandName);
+  const command = client.commands.get(name);
   if (!command) return;
 
   try {
-    await command.execute(message, client, args);
+    await command.execute(message, client, parts);
   } catch (error) {
-    console.error(`Command ${commandName} failed:`, error);
-    await message.reply("❌ Command failed. Please try again.");
+    console.error(`Prefix command error (${name}):`, error);
+    await message.reply("❌ Command failed. Check hosting logs.");
+  }
+});
+
+client.on(Events.InteractionCreate, async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+
+  const command = client.commands.get(interaction.commandName);
+
+  if (!command || typeof command.executeSlash !== "function") {
+    return interaction.reply({
+      content: "This slash command is not configured yet.",
+      ephemeral: true
+    });
+  }
+
+  try {
+    await command.executeSlash(interaction, client);
+  } catch (error) {
+    console.error(`Slash command error (${interaction.commandName}):`, error);
+
+    const reply = {
+      content: "❌ Command failed. Check hosting logs.",
+      ephemeral: true
+    };
+
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp(reply);
+    } else {
+      await interaction.reply(reply);
+    }
   }
 });
 
