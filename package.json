@@ -1,0 +1,16 @@
+
+{
+  "name": "vexora",
+  "version": "1.0.0",
+  "description": "VEXORA Discord bot",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "engines": {
+    "node": "22.x"
+  },
+  "dependencies": {
+    "discord.js": "^14.19.3"
+  }
+}
