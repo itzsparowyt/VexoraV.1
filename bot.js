@@ -1,15 +1,29 @@
+// ========================================
+// VEXORA BOT — PART 1/3
+// Single-file Discord bot (discord.js v14)
+// ========================================
 
 const {
-  Client, GatewayIntentBits, Events, EmbedBuilder,
-  SlashCommandBuilder, PermissionFlagsBits, REST, Routes
+  Client,
+  GatewayIntentBits,
+  Events,
+  ActivityType,
+  EmbedBuilder,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
+  REST,
+  Routes
 } = require("discord.js");
 
 const TOKEN = process.env.DISCORD_TOKEN;
-const PREFIX = process.env.PREFIX || "!";
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const GUILD_ID = process.env.DISCORD_GUILD_ID;
+const PREFIX = process.env.PREFIX || "!";
 
-if (!TOKEN) throw new Error("DISCORD_TOKEN is missing.");
+if (!TOKEN) {
+  console.error("ERROR: DISCORD_TOKEN environment variable is missing.");
+  process.exit(1);
+}
 
 const client = new Client({
   intents: [
@@ -20,242 +34,417 @@ const client = new Client({
   ]
 });
 
-const commands = [
-  new SlashCommandBuilder()
-    .setName("ping").setDescription("Check bot latency"),
+const BLUE = 0x2589ff;
 
-  new SlashCommandBuilder()
-    .setName("help").setDescription("Show VEXORA commands"),
-
-  new SlashCommandBuilder()
-    .setName("serverinfo").setDescription("Show server information"),
-
-  new SlashCommandBuilder()
-    .setName("userinfo").setDescription("Show user information")
-    .addUserOption(o => o.setName("user").setDescription("User to inspect")),
-
-  new SlashCommandBuilder()
-    .setName("kick").setDescription("Kick a member")
-    .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers)
-    .addUserOption(o => o.setName("user").setDescription("Member").setRequired(true))
-    .addStringOption(o => o.setName("reason").setDescription("Reason")),
-
-  new SlashCommandBuilder()
-    .setName("ban").setDescription("Ban a member")
-    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
-    .addUserOption(o => o.setName("user").setDescription("Member").setRequired(true))
-    .addStringOption(o => o.setName("reason").setDescription("Reason")),
-
-  new SlashCommandBuilder()
-    .setName("timeout").setDescription("Timeout a member")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
-    .addUserOption(o => o.setName("user").setDescription("Member").setRequired(true))
-    .addIntegerOption(o => o.setName("minutes").setDescription("Duration in minutes").setRequired(true).setMinValue(1).setMaxValue(40320))
-    .addStringOption(o => o.setName("reason").setDescription("Reason")),
-
-  new SlashCommandBuilder()
-    .setName("purge").setDescription("Delete recent messages")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-    .addIntegerOption(o => o.setName("amount").setDescription("Number from 1 to 100").setRequired(true).setMinValue(1).setMaxValue(100))
-].map(c => c.toJSON());
-
-function embed(title, description, color = 0x2684ff) {
+function makeEmbed(title, description, color = BLUE) {
   return new EmbedBuilder()
-    .setColor(color).setTitle(title)
+    .setColor(color)
+    .setTitle(title)
     .setDescription(description)
-    .setFooter({ text: "VEXORA • Server Management" })
+    .setFooter({ text: "VEXORA • Discord Security Bot" })
     .setTimestamp();
 }
 
-async function runCommand(name, ctx, args = [], slash = false) {
-  const guild = ctx.guild;
-  const member = slash ? ctx.member : ctx.member;
-  const user = slash ? ctx.user : ctx.author;
-  const optionUser = key => slash ? ctx.options.getUser(key) : null;
-  const optionString = key => slash ? ctx.options.getString(key) : null;
-  const optionInt = key => slash ? ctx.options.getInteger(key) : null;
+async function replyMessage(message, title, description, color = BLUE) {
+  return message.reply({
+    embeds: [makeEmbed(title, description, color)]
+  });
+}
 
-  const reply = async data => {
-    if (!slash) return ctx.reply(data);
-    if (ctx.replied || ctx.deferred) return ctx.followUp(data);
-    return ctx.reply(data);
+async function replyInteraction(interaction, title, description, color = BLUE) {
+  const payload = {
+    embeds: [makeEmbed(title, description, color)],
+    ephemeral: true
   };
 
-  if (name === "ping") {
-    return reply({ embeds: [embed("🏓 VEXORA Pong!", `WebSocket latency: **${client.ws.ping} ms**`)] });
+  if (interaction.replied || interaction.deferred) {
+    return interaction.followUp(payload);
   }
 
-  if (name === "help") {
-    return reply({ embeds: [embed("🛡️ VEXORA Commands",
-      "`!ping` / `/ping` — Latency\n" +
-      "`!help` / `/help` — Command guide\n" +
-      "`!serverinfo` / `/serverinfo` — Server details\n" +
-      "`!userinfo [@user]` / `/userinfo` — User details\n" +
-      "`!kick @user [reason]` / `/kick` — Kick\n" +
-      "`!ban @user [reason]` / `/ban` — Ban\n" +
-      "`!timeout @user minutes [reason]` / `/timeout` — Timeout\n" +
-      "`!purge amount` / `/purge` — Delete messages"
-    )] });
+  return interaction.reply(payload);
+}
+
+const prefixCommands = new Map();
+
+function command(name, description, execute) {
+  prefixCommands.set(name, { name, description, execute });
+}
+
+// ---------- BASIC COMMANDS ----------
+
+command("ping", "Check bot latency", async (message) => {
+  await replyMessage(
+    message,
+    "🏓 Pong!",
+    `WebSocket latency: **${client.ws.ping} ms**`
+  );
+});
+
+command("splash", "Show VEXORA splash screen", async (message) => {
+  const embed = new EmbedBuilder()
+    .setColor(0x1677ff)
+    .setTitle("⚡ V E X O R A")
+    .setDescription(
+      "**Security • Moderation • Management**\n\n" +
+      "Your server, protected and organized.\n\n" +
+      `Prefix: \`${PREFIX}\`\n` +
+      `Commands loaded: **${prefixCommands.size}**`
+    )
+    .setThumbnail(client.user.displayAvatarURL())
+    .setFooter({ text: "VEXORA • Ready to protect your server" })
+    .setTimestamp();
+
+  await message.reply({ embeds: [embed] });
+});
+
+command("help", "Show available commands", async (message) => {
+  const list = [...prefixCommands.keys()]
+    .map((name) => `\`${PREFIX}${name}\``)
+    .join(" • ");
+
+  await replyMessage(message, "📚 VEXORA Commands", list);
+});
+
+command("about", "About VEXORA", async (message) => {
+  await replyMessage(
+    message,
+    "ℹ️ About VEXORA",
+    "VEXORA is a Discord bot for moderation, security and server utilities."
+  );
+});
+
+command("serverinfo", "Show server information", async (message) => {
+  if (!message.guild) {
+    return replyMessage(message, "Server Info", "Use this command in a server.");
   }
 
-  if (!guild) return reply({ content: "❌ Use this command inside a server." });
+  await replyMessage(
+    message,
+    `📊 ${message.guild.name}`,
+    `**Members:** ${message.guild.memberCount}\n` +
+    `**Server ID:** ${message.guild.id}\n` +
+    `**Created:** <t:${Math.floor(message.guild.createdTimestamp / 1000)}:D>`
+  );
+});
 
-  if (name === "serverinfo") {
-    const owner = await guild.fetchOwner().catch(() => null);
-    return reply({ embeds: [embed(`🏰 ${guild.name}`,
-      `**Server ID:** ${guild.id}\n**Members:** ${guild.memberCount}\n` +
-      `**Owner:** ${owner?.user.tag || "Unavailable"}\n` +
-      `**Roles:** ${guild.roles.cache.size}\n` +
-      `**Created:** <t:${Math.floor(guild.createdTimestamp / 1000)}:D>`
-    )] });
+command("userinfo", "Show user information", async (message) => {
+  const member = message.mentions.members.first() || message.member;
+
+  if (!member) {
+    return replyMessage(message, "User Info", "User not found.");
   }
 
-  if (name === "userinfo") {
-    const target = optionUser("user") ||
-      (!slash ? (ctx.mentions.users.first() || user) : user);
-    const targetMember = await guild.members.fetch(target.id).catch(() => null);
+  await replyMessage(
+    message,
+    `👤 ${member.user.tag}`,
+    `**User ID:** ${member.id}\n` +
+    `**Joined:** ${member.joinedTimestamp
+      ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>`
+      : "Unknown"}\n` +
+    `**Account created:** <t:${Math.floor(member.user.createdTimestamp / 1000)}:D>`
+  );
+});
 
-    return reply({ embeds: [new EmbedBuilder()
-      .setColor(0x2684ff).setTitle(`👤 ${target.tag}`)
-      .setThumbnail(target.displayAvatarURL())
-      .addFields(
-        { name: "User ID", value: target.id },
-        { name: "Bot", value: target.bot ? "Yes" : "No", inline: true },
-        { name: "Joined server", value: targetMember?.joinedTimestamp ? `<t:${Math.floor(targetMember.joinedTimestamp / 1000)}:D>` : "Unavailable", inline: true }
-      ).setTimestamp()] });
+command("avatar", "Show your or a mentioned user's avatar", async (message) => {
+  const user = message.mentions.users.first() || message.author;
+  const embed = makeEmbed(`🖼️ ${user.username}'s Avatar`, `[Open avatar](${user.displayAvatarURL({ size: 1024 })})`)
+    .setImage(user.displayAvatarURL({ size: 1024 }));
+
+  await message.reply({ embeds: [embed] });
+});
+
+command("botinfo", "Show bot information", async (message) => {
+  await replyMessage(
+    message,
+    "🤖 VEXORA Bot Info",
+    `**Bot:** ${client.user.tag}\n` +
+    `**Servers:** ${client.guilds.cache.size}\n` +
+    `**Users cached:** ${client.users.cache.size}\n` +
+    `**Prefix:** \`${PREFIX}\``
+  );
+});
+
+command("uptime", "Show bot uptime", async (message) => {
+  const seconds = Math.floor((client.uptime || 0) / 1000);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remaining = seconds % 60;
+
+  await replyMessage(
+    message,
+    "⏱️ Bot Uptime",
+    `${hours}h ${minutes}m ${remaining}s`
+  );
+});
+
+command("invite", "Show bot invite link", async (message) => {
+  const url = `https://discord.com/oauth2/authorize?client_id=${client.user.id}&scope=bot%20applications.commands&permissions=8`;
+  await replyMessage(message, "🔗 Invite VEXORA", `[Click here to invite VEXORA](${url})`);
+});
+
+// ---------- MODERATION COMMANDS ----------
+
+command("kick", "Kick a mentioned member", async (message, args) => {
+  if (!message.member.permissions.has(PermissionFlagsBits.KickMembers)) {
+    return replyMessage(message, "⛔ Permission Denied", "You need **Kick Members** permission.", 0xff4444);
   }
 
-  const settings = {
-    kick: { permission: PermissionFlagsBits.KickMembers, label: "kick" },
-    ban: { permission: PermissionFlagsBits.BanMembers, label: "ban" },
-    timeout: { permission: PermissionFlagsBits.ModerateMembers, label: "timeout" },
-    purge: { permission: PermissionFlagsBits.ManageMessages, label: "purge" }
-  }[name];
+  const member = message.mentions.members.first();
 
-  if (!settings) return;
-
-  if (!member.permissions.has(settings.permission)) {
-    return reply({ content: "❌ You don't have permission to use this command." });
+  if (!member) {
+    return replyMessage(message, "Usage", `\`${PREFIX}kick @member [reason]\``);
   }
 
-  if (name === "purge") {
-    const amount = slash ? optionInt("amount") : Number(args[0]);
-    if (!Number.isInteger(amount) || amount < 1 || amount > 100) {
-      return reply({ content: "❌ Use a number from 1 to 100." });
-    }
-    if (!ctx.channel?.isTextBased() || !ctx.channel.bulkDelete) {
-      return reply({ content: "❌ This channel doesn't support bulk deletion." });
-    }
-    const deleted = await ctx.channel.bulkDelete(amount, true);
-    return reply({ embeds: [embed("🧹 Messages Purged", `Deleted **${deleted.size}** recent messages.`, 0x2ecc71)] });
+  if (!member.kickable) {
+    return replyMessage(message, "Cannot Kick", "I cannot kick that member. Check role hierarchy and my permissions.", 0xff4444);
   }
 
-  const targetUser = slash ? optionUser("user") :
-    (ctx.mentions.users.first() ||
-      (args[0] ? await client.users.fetch(args[0]).catch(() => null) : null));
+  const reason = args.slice(1).join(" ") || "No reason provided";
 
-  if (!targetUser) return reply({ content: `❌ Mention a member. Usage: \`!${name} @user\`` });
+  await member.kick(reason);
+  await replyMessage(message, "👢 Member Kicked", `**Member:** ${member.user.tag}\n**Reason:** ${reason}`);
+});
 
-  const target = await guild.members.fetch(targetUser.id).catch(() => null);
-  if (!target) return reply({ content: "❌ Member not found in this server." });
-
-  if (target.id === user.id) return reply({ content: "❌ You cannot use this command on yourself." });
-  if (target.id === client.user.id) return reply({ content: "❌ I cannot moderate myself." });
-  if (target.id === guild.ownerId) return reply({ content: "❌ The server owner cannot be moderated by this command." });
-
-  if (member.roles.highest.comparePositionTo(target.roles.highest) <= 0 &&
-      user.id !== guild.ownerId) {
-    return reply({ content: "❌ Your highest role must be above the target's role." });
+command("ban", "Ban a mentioned member", async (message, args) => {
+  if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
+    return replyMessage(message, "⛔ Permission Denied", "You need **Ban Members** permission.", 0xff4444);
   }
 
-  if (!target.moderatable && name === "timeout") {
-    return reply({ content: "❌ I cannot timeout this member. Check my role position and permissions." });
-  }
-  if (name === "kick" && !target.kickable) return reply({ content: "❌ I cannot kick this member." });
-  if (name === "ban" && !target.bannable) return reply({ content: "❌ I cannot ban this member." });
+  const member = message.mentions.members.first();
 
-  let reason, duration;
-  if (slash) {
-    reason = optionString("reason") || "No reason provided";
-    duration = optionInt("minutes");
-  } else {
-    duration = name === "timeout" ? Number(args[1]) : null;
-    reason = args.slice(name === "timeout" ? 2 : 1).join(" ") || "No reason provided";
+  if (!member) {
+    return replyMessage(message, "Usage", `\`${PREFIX}ban @member [reason]\``);
+  }
+
+  if (!member.bannable) {
+    return replyMessage(message, "Cannot Ban", "I cannot ban that member. Check role hierarchy and my permissions.", 0xff4444);
+  }
+
+  const reason = args.slice(1).join(" ") || "No reason provided";
+
+  await member.ban({ reason });
+  await replyMessage(message, "🔨 Member Banned", `**Member:** ${member.user.tag}\n**Reason:** ${reason}`);
+});
+
+command("purge", "Delete recent messages", async (message, args) => {
+  if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
+    return replyMessage(message, "⛔ Permission Denied", "You need **Manage Messages** permission.", 0xff4444);
+  }
+
+  const amount = Number(args[0]);
+
+  if (!Number.isInteger(amount) || amount < 1 || amount > 100) {
+    return replyMessage(message, "Usage", `Use \`${PREFIX}purge 1-100\`.`);
+  }
+
+  if (!message.channel.isTextBased() || !message.channel.bulkDelete) {
+    return replyMessage(message, "Error", "This channel does not support bulk deletion.");
   }
 
   try {
-    if (name === "kick") await target.kick(reason);
-    if (name === "ban") await target.ban({ reason });
-    if (name === "timeout") {
-      if (!Number.isInteger(duration) || duration < 1 || duration > 40320) {
-        return reply({ content: "❌ Timeout must be 1–40320 minutes." });
-      }
-      await target.timeout(duration * 60 * 1000, reason);
-    }
-
-    return reply({ embeds: [embed(
-      `✅ Member ${name === "timeout" ? "Timed Out" : name === "kick" ? "Kicked" : "Banned"}`,
-      `**Member:** ${target.user.tag}\n**Moderator:** ${user.tag}\n**Reason:** ${reason}`,
-      0x2ecc71
-    )] });
-  } catch (error) {
-    console.error(`${name} failed:`, error);
-    return reply({ content: "❌ Action failed. Check bot permissions and role hierarchy." });
+    const deleted = await message.channel.bulkDelete(amount, true);
+    await replyMessage(message, "🧹 Messages Deleted", `Deleted **${deleted.size}** recent messages.`);
+  } catch {
+    await replyMessage(message, "Error", "Could not delete messages. Check permissions and channel type.", 0xff4444);
   }
-}
+});
 
-client.once(Events.ClientReady, async ready => {
-  console.log(`VEXORA online: ${ready.user.tag}`);
+command("lock", "Lock the current channel", async (message) => {
+  if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+    return replyMessage(message, "⛔ Permission Denied", "You need **Manage Channels** permission.", 0xff4444);
+  }
 
-  ready.user.setPresence({
-    activities: [{ name: `${PREFIX}help | VEXORA`, type: ActivityType.Watching }],
+  await message.channel.permissionOverwrites.edit(
+    message.guild.roles.everyone,
+    { SendMessages: false }
+  );
+
+  await replyMessage(message, "🔒 Channel Locked", "Members can no longer send messages here.");
+});
+
+command("unlock", "Unlock the current channel", async (message) => {
+  if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+    return replyMessage(message, "⛔ Permission Denied", "You need **Manage Channels** permission.", 0xff4444);
+  }
+
+  await message.channel.permissionOverwrites.edit(
+    message.guild.roles.everyone,
+    { SendMessages: null }
+  );
+
+  await replyMessage(message, "🔓 Channel Unlocked", "The default send-message permission has been restored.");
+});
+
+command("slowmode", "Set channel slowmode in seconds", async (message, args) => {
+  if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+    return replyMessage(message, "⛔ Permission Denied", "You need **Manage Channels** permission.", 0xff4444);
+  }
+
+  const seconds = Number(args[0]);
+
+  if (!Number.isInteger(seconds) || seconds < 0 || seconds > 21600) {
+    return replyMessage(message, "Usage", `Use \`${PREFIX}slowmode 0-21600\`.`);
+  }
+
+  await message.channel.setRateLimitPerUser(seconds);
+  await replyMessage(message, "🐢 Slowmode Updated", `Slowmode set to **${seconds} seconds**.`);
+});
+
+command("timeout", "Timeout a mentioned member", async (message, args) => {
+  if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+    return replyMessage(message, "⛔ Permission Denied", "You need **Moderate Members** permission.", 0xff4444);
+  }
+
+  const member = message.mentions.members.first();
+  const minutes = Number(args[1]);
+
+  if (!member || !Number.isInteger(minutes) || minutes < 1 || minutes > 40320) {
+    return replyMessage(message, "Usage", `\`${PREFIX}timeout @member minutes [reason]\``);
+  }
+
+  if (!member.moderatable) {
+    return replyMessage(message, "Cannot Timeout", "I cannot timeout that member. Check role hierarchy and permissions.", 0xff4444);
+  }
+
+  const reason = args.slice(2).join(" ") || "No reason provided";
+  await member.timeout(minutes * 60 * 1000, reason);
+
+  await replyMessage(
+    message,
+    "🔇 Member Timed Out",
+    `**Member:** ${member.user.tag}\n**Duration:** ${minutes} minutes\n**Reason:** ${reason}`
+  );
+});
+
+// ---------- PREFIX COMMAND HANDLER ----------
+
+client.on(Events.MessageCreate, async (message) => {
+  if (message.author.bot || !message.content.startsWith(PREFIX)) return;
+
+  const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
+  const name = (args.shift() || "").toLowerCase();
+
+  const selected = prefixCommands.get(name);
+  if (!selected) return;
+
+  try {
+    await selected.execute(message, args);
+  } catch (error) {
+    console.error(`Command ${name} failed:`, error);
+    await message.reply({
+      embeds: [makeEmbed("❌ Command Error", "The command failed. Check bot permissions and hosting logs.", 0xff4444)]
+    }).catch(() => {});
+  }
+});
+
+// ---------- SLASH COMMANDS ----------
+
+const slashCommands = [
+  new SlashCommandBuilder()
+    .setName("ping")
+    .setDescription("Check VEXORA latency"),
+
+  new SlashCommandBuilder()
+    .setName("splash")
+    .setDescription("Show the VEXORA splash screen"),
+
+  new SlashCommandBuilder()
+    .setName("help")
+    .setDescription("Show VEXORA command help"),
+
+  new SlashCommandBuilder()
+    .setName("serverinfo")
+    .setDescription("Show server information"),
+
+  new SlashCommandBuilder()
+    .setName("userinfo")
+    .setDescription("Show your user information")
+].map((item) => item.toJSON());
+
+client.on(Events.InteractionCreate, async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
+  try {
+    switch (interaction.commandName) {
+      case "ping":
+        await replyInteraction(interaction, "🏓 Pong!", `WebSocket latency: **${client.ws.ping} ms**`);
+        break;
+
+      case "splash":
+        await replyInteraction(
+          interaction,
+          "⚡ V E X O R A",
+          "Security • Moderation • Management\n\n" +
+          `Prefix: \`${PREFIX}\`\n` +
+          `Commands loaded: **${prefixCommands.size}**`
+        );
+        break;
+
+      case "help":
+        await replyInteraction(
+          interaction,
+          "📚 VEXORA Help",
+          [...prefixCommands.keys()].map((name) => `\`${PREFIX}${name}\``).join(" • ")
+        );
+        break;
+
+      case "serverinfo":
+        if (!interaction.guild) {
+          await replyInteraction(interaction, "Server Info", "Use this command inside a server.");
+          break;
+        }
+
+        await replyInteraction(
+          interaction,
+          `📊 ${interaction.guild.name}`,
+          `**Members:** ${interaction.guild.memberCount}\n**Server ID:** ${interaction.guild.id}`
+        );
+        break;
+
+      case "userinfo":
+        await replyInteraction(
+          interaction,
+          `👤 ${interaction.user.tag}`,
+          `**User ID:** ${interaction.user.id}\n` +
+          `**Account created:** <t:${Math.floor(interaction.user.createdTimestamp / 1000)}:D>`
+        );
+        break;
+    }
+  } catch (error) {
+    console.error("Slash command failed:", error);
+    await replyInteraction(interaction, "❌ Error", "The command could not be completed.", 0xff4444).catch(() => {});
+  }
+});
+
+// ---------- STARTUP AND SLASH REGISTRATION ----------
+
+client.once(Events.ClientReady, async (readyClient) => {
+  console.log(`VEXORA online: ${readyClient.user.tag}`);
+  console.log(`Prefix: ${PREFIX}`);
+  console.log(`Prefix commands loaded: ${prefixCommands.size}`);
+
+  readyClient.user.setPresence({
+    activities: [{ name: `${PREFIX}help | VEXORA Security`, type: ActivityType.Watching }],
     status: "online"
   });
 
+  // Register slash commands to a test server when IDs are configured.
   if (CLIENT_ID && GUILD_ID) {
     try {
       const rest = new REST({ version: "10" }).setToken(TOKEN);
-      await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), {
-        body: commands
-      });
-      console.log(`Registered ${commands.length} guild slash commands.`);
+
+      await rest.put(
+        Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+        { body: slashCommands }
+      );
+
+      console.log("VEXORA slash commands registered to the configured test server.");
     } catch (error) {
-      console.error("Slash registration failed:", error);
+      console.error("Slash command registration failed:", error);
     }
   } else {
     console.log("Slash registration skipped: set DISCORD_CLIENT_ID and DISCORD_GUILD_ID.");
   }
 });
 
-client.on(Events.MessageCreate, async message => {
-  if (message.author.bot || !message.guild || !message.content.startsWith(PREFIX)) return;
-
-  const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
-  const name = (args.shift() || "").toLowerCase();
-  if (!name) return;
-
-  try {
-    await runCommand(name, message, args, false);
-  } catch (error) {
-    console.error("Prefix command error:", error);
-    await message.reply("❌ Command failed. Check hosting logs.");
-  }
-});
-
-client.on(Events.InteractionCreate, async interaction => {
-  if (!interaction.isChatInputCommand()) return;
-
-  try {
-    await runCommand(interaction.commandName, interaction, [], true);
-  } catch (error) {
-    console.error("Slash command error:", error);
-    const response = { content: "❌ Command failed. Check hosting logs.", ephemeral: true };
-    if (interaction.replied || interaction.deferred) await interaction.followUp(response);
-    else await interaction.reply(response);
-  }
-});
-
-client.login(TOKEN).catch(error => {
-  console.error("VEXORA login failed:", error);
-  process.exit(1);
-});
+client.login(TOKEN);
