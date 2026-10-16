@@ -8,11 +8,22 @@ const {
   GatewayIntentBits,
   Events,
   ActivityType,
+    Events,
+  ActivityType,
+  EmbedBuilder,
   EmbedBuilder,
   PermissionFlagsBits,
   SlashCommandBuilder,
   REST,
   Routes
+} = require("discord.js");
+const {
+  Client,
+  GatewayIntentBits,
+  Events,
+  ActivityType,
+  EmbedBuilder,
+  PermissionFlagsBits
 } = require("discord.js");
 
 const TOKEN = process.env.DISCORD_TOKEN;
